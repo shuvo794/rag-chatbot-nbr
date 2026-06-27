@@ -1,8 +1,10 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { supabase } from './src/db/supabase.js';
 
 dotenv.config();
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
