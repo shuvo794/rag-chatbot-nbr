@@ -6,7 +6,7 @@ import { pipeline } from '@xenova/transformers';
 import { supabase } from '../db/supabase.js';
 
 const require = createRequire(import.meta.url);
-const pdf = require('pdf-parse');
+const { PDFParse } = require('pdf-parse');
 
 
 let extractor = null;
@@ -74,7 +74,8 @@ export function chunkText(text, chunkSize = 500, overlap = 50) {
  */
 async function parsePDF(filePath) {
   const dataBuffer = fs.readFileSync(filePath);
-  const result = await pdf(dataBuffer);
+  const parser = new PDFParse(new Uint8Array(dataBuffer));
+  const result = await parser.getText();
   return result.text;
 }
 

@@ -9,6 +9,23 @@ function App() {
   const [ingestStatus, setIngestStatus] = useState('');
   const messagesEndRef = useRef(null);
 
+  // Authentication states
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [passcode, setPasscode] = useState('');
+  const [authError, setAuthError] = useState('');
+
+  // Listen to 401 unauthorized events from useChat hook
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setIsAuthModalOpen(true);
+      setAuthError('Unauthorized: Please enter the correct access passcode.');
+    };
+    window.addEventListener('chat-unauthorized', handleUnauthorized);
+    return () => {
+      window.removeEventListener('chat-unauthorized', handleUnauthorized);
+    };
+  }, []);
+
   // Suggestions for empty state onboarding
   const suggestions = [
     {
@@ -64,9 +81,20 @@ function App() {
     setIngestStatus('Analyzing /docs directory and loading documents...');
     
     try {
+      const savedPasscode = localStorage.getItem('chat_passcode') || '';
       const response = await fetch('http://localhost:5000/api/ingest', {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'Authorization': savedPasscode
+        }
       });
+
+      if (response.status === 401) {
+        setIsAuthModalOpen(true);
+        setAuthError('Unauthorized: Ingestion requires a valid passcode.');
+        setIngestStatus('Error: Unauthorized passcode.');
+        return;
+      }
       
       const data = await response.json();
       if (data.success) {
@@ -434,6 +462,45 @@ function App() {
         </footer>
 
       </main>
+
+      {/* Auth Modal Overlay */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl w-full max-w-sm shadow-2xl relative">
+            <h3 className="text-lg font-bold text-white mb-2">সুরক্ষিত অ্যাক্সেস (Secure Access)</h3>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              nbr-chatbot ব্যবহার করার জন্য অনুগ্রহ করে অ্যাক্সেস পাসকোডটি দিন।
+              <br/>
+              <span className="text-[10px] text-slate-500">(Enter the access passcode to use the chatbot.)</span>
+            </p>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (!passcode.trim()) return;
+              localStorage.setItem('chat_passcode', passcode);
+              setIsAuthModalOpen(false);
+              setAuthError('');
+              window.location.reload(); // Refresh to clean states and retry
+            }}>
+              <input
+                type="password"
+                value={passcode}
+                onChange={(e) => setPasscode(e.target.value)}
+                placeholder="পাসকোড দিন... (Enter passcode...)"
+                className="w-full bg-slate-950 border border-slate-850 focus:border-cyan-500 rounded-xl py-3 px-4 outline-none text-sm text-white mb-3 shadow-inner"
+                autoFocus
+              />
+              {authError && <p className="text-xs text-rose-500 mb-3 font-medium">{authError}</p>}
+              <button
+                type="submit"
+                className="w-full py-3 bg-gradient-to-r from-cyan-600 to-indigo-650 hover:from-cyan-500 hover:to-indigo-550 text-white font-semibold rounded-xl text-sm shadow-lg shadow-indigo-500/10 cursor-pointer transition-all active:scale-[0.98]"
+              >
+                অ্যাক্সেস করুন (Access)
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

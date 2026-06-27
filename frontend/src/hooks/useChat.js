@@ -65,17 +65,23 @@ export function useChat(apiUrl = 'http://localhost:5000/api/chat') {
     setMessages((prev) => [...prev, assistantMessagePlaceholder]);
 
     try {
-      // 3. Initiate SSE Streaming Request
+      // 3. Retrieve passcode from local storage and initiate SSE Request
+      const passcode = localStorage.getItem('chat_passcode') || '';
       const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Authorization': passcode
         },
         body: JSON.stringify({ 
           message: content,
           history: chatHistory
         })
       });
+
+      if (response.status === 401) {
+        throw new Error('UNAUTHORIZED_PASSWORD');
+      }
 
       if (!response.ok) {
         throw new Error(`Failed to send message: ${response.statusText}`);
@@ -138,16 +144,21 @@ export function useChat(apiUrl = 'http://localhost:5000/api/chat') {
       }
     } catch (err) {
       console.error('Error streaming chat:', err);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === assistantMessageId
-            ? { 
-                ...msg, 
-                content: `দুঃখিত, সংযোগে ত্রুটি ঘটেছে। অনুগ্রহ করে আবার চেষ্টা করুন।\n\n*(Error: ${err.message || err})*` 
-              }
-            : msg
-        )
-      );
+      if (err.message === 'UNAUTHORIZED_PASSWORD') {
+        window.dispatchEvent(new CustomEvent('chat-unauthorized'));
+        setMessages((prev) => prev.slice(0, -1)); // Remove the empty assistant placeholder
+      } else {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { 
+                  ...msg, 
+                  content: `দুঃখিত, সংযোগে ত্রুটি ঘটেছে। অনুগ্রহ করে আবার চেষ্টা করুন।\n\n*(Error: ${err.message || err})*` 
+                }
+              : msg
+          )
+        );
+      }
     } finally {
       setIsLoading(false);
     }

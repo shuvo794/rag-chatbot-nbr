@@ -19,7 +19,21 @@ app.get('/', (req, res) => {
   res.json({ message: "Hello World from RAG Chatbot Backend!" });
 });
 
-app.post('/api/ingest', async (req, res) => {
+// Authentication middleware to check against optional CHAT_PASSWORD
+const checkAuth = (req, res, next) => {
+  const chatPassword = process.env.CHAT_PASSWORD;
+  if (!chatPassword) {
+    return next(); // Auth not enabled in env
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== chatPassword) {
+    return res.status(401).json({ error: "Unauthorized: Invalid or missing CHAT_PASSWORD passcode." });
+  }
+  next();
+};
+
+app.post('/api/ingest', checkAuth, async (req, res) => {
   try {
     await ingestDocs();
     res.json({ success: true, message: "Ingestion pipeline completed successfully." });
@@ -29,7 +43,7 @@ app.post('/api/ingest', async (req, res) => {
   }
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', checkAuth, async (req, res) => {
   const { message, history } = req.body;
   if (!message) {
     return res.status(400).json({ error: "Message is required" });
