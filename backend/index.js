@@ -30,7 +30,7 @@ app.post('/api/ingest', async (req, res) => {
 });
 
 app.post('/api/chat', async (req, res) => {
-  const { message } = req.body;
+  const { message, history } = req.body;
   if (!message) {
     return res.status(400).json({ error: "Message is required" });
   }
@@ -73,7 +73,14 @@ app.post('/api/chat', async (req, res) => {
       contextText = 'Database is unconfigured or unavailable. Prompt user to complete the setup.';
     }
 
-    // 3. Construct prompt
+    // 3. Construct messages payload including conversation memory (history)
+    let formattedHistory = [];
+    if (Array.isArray(history)) {
+      formattedHistory = history
+        .filter(msg => msg && (msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string')
+        .slice(-6); // Limit memory to last 3 turns (6 messages)
+    }
+
     const systemPrompt = `You are a professional, accurate RAG Chatbot. 
 Answer the user's question using ONLY the provided context below. Do not use any outside knowledge or hallucinate.
 If the context does not contain enough information to answer, state clearly that you do not have that information in your documents.
@@ -87,6 +94,12 @@ Retrieved Context:
 ${contextText}
 ---`;
 
+    const chatMessages = [
+      { role: 'system', content: systemPrompt },
+      ...formattedHistory,
+      { role: 'user', content: message }
+    ];
+
     // 4. Stream response using OpenAI SDK
     console.log(`Calling LLM API using model: ${llmConfig.model}...`);
     const openaiClient = new OpenAI({
@@ -96,10 +109,7 @@ ${contextText}
 
     const stream = await openaiClient.chat.completions.create({
       model: llmConfig.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: message }
-      ],
+      messages: chatMessages,
       stream: true
     });
 

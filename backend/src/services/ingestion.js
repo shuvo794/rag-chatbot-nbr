@@ -6,7 +6,8 @@ import { pipeline } from '@xenova/transformers';
 import { supabase } from '../db/supabase.js';
 
 const require = createRequire(import.meta.url);
-const { PDFParse } = require('pdf-parse');
+const pdf = require('pdf-parse');
+
 
 let extractor = null;
 
@@ -73,8 +74,7 @@ export function chunkText(text, chunkSize = 500, overlap = 50) {
  */
 async function parsePDF(filePath) {
   const dataBuffer = fs.readFileSync(filePath);
-  const parser = new PDFParse(new Uint8Array(dataBuffer));
-  const result = await parser.getText();
+  const result = await pdf(dataBuffer);
   return result.text;
 }
 
@@ -85,8 +85,8 @@ async function parsePDF(filePath) {
  * @returns {Promise<string>} Extracted text.
  */
 async function parseImage(filePath) {
-  // Initialize tesseract worker
-  const worker = await createWorker('eng');
+  // Initialize tesseract worker for bilingual (English & Bengali) OCR
+  const worker = await createWorker('eng+ben');
   const { data: { text } } = await worker.recognize(filePath);
   await worker.terminate();
   return text;
