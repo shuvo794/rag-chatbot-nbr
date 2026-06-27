@@ -10,12 +10,12 @@ create table if not exists documents (
   id bigserial primary key,
   content text not null,                -- The text chunk content
   metadata jsonb,                       -- File metadata (citation source, page number, etc.)
-  embedding vector(1536)                -- Embedding vector representation (1536 is standard for OpenAI embeddings)
+  embedding vector(384)                 -- Embedding vector representation (384 is standard for Xenova/all-MiniLM-L6-v2)
 );
 
 -- 3. Create a function to perform cosine similarity searches
 create or replace function match_documents (
-  query_embedding vector(1536),
+  query_embedding vector(384),
   match_threshold float,
   match_count int
 )

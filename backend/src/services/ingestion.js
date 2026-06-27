@@ -2,9 +2,30 @@ import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
 import { createWorker } from 'tesseract.js';
+import { pipeline } from '@xenova/transformers';
+import { supabase } from '../db/supabase.js';
 
 const require = createRequire(import.meta.url);
 const { PDFParse } = require('pdf-parse');
+
+let extractor = null;
+
+/**
+ * Generates vector embeddings for a given text using a local model.
+ * 
+ * @param {string} text - The input text.
+ * @returns {Promise<number[]>} Float array of dimensions.
+ */
+export async function getEmbedding(text) {
+  if (!extractor) {
+    console.log('Loading local embedding model (Xenova/all-MiniLM-L6-v2)...');
+    // Disable offline loading warning for downloading
+    extractor = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+    console.log('Embedding model loaded successfully.');
+  }
+  const output = await extractor(text, { pooling: 'mean', normalize: true });
+  return Array.from(output.data);
+}
 
 /**
  * Splits text into overlapping chunks of a specified size (measured in words).
@@ -122,14 +143,36 @@ export async function ingestDocs() {
       const chunks = chunkText(extractedText, 500, 50);
       console.log(`Generated ${chunks.length} chunks from "${file}".`);
 
-      // Print first chunk for demonstration
-      chunks.forEach((chunk, index) => {
-        console.log(`\n--- CHUNK ${index + 1} (${chunk.split(' ').length} words) ---`);
-        console.log(chunk.substring(0, 300) + (chunk.length > 300 ? '...' : ''));
-      });
+      const rows = [];
+      for (let index = 0; index < chunks.length; index++) {
+        const chunk = chunks[index];
+        console.log(`Generating embedding for chunk ${index + 1}/${chunks.length}...`);
+        try {
+          const embedding = await getEmbedding(chunk);
+          rows.push({
+            content: chunk,
+            metadata: { source: file, chunk_index: index },
+            embedding: embedding
+          });
+        } catch (embedError) {
+          console.error(`Failed to generate embedding for chunk ${index + 1}:`, embedError);
+        }
+      }
+
+      if (rows.length > 0) {
+        console.log(`Inserting ${rows.length} chunks into Supabase...`);
+        const { error } = await supabase
+          .from('documents')
+          .insert(rows);
+
+        if (error) {
+          throw error;
+        }
+        console.log(`Successfully stored ${rows.length} chunks from "${file}" in Supabase.`);
+      }
 
     } catch (error) {
-      console.error(`Error processing file "${file}":`, error);
+      console.error(`Error processing file "${file}":`, error.message || error);
     }
   }
 
