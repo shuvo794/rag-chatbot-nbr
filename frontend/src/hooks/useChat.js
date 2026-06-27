@@ -41,6 +41,15 @@ export function useChat(apiUrl = 'http://localhost:5000/api/chat') {
       citations: []
     };
     
+    // Extract dialogue history (excluding welcome message, mapping only standard roles)
+    const chatHistory = messages
+      .filter(msg => msg.id !== 'welcome')
+      .map(msg => ({
+        role: msg.role,
+        content: msg.content
+      }))
+      .slice(-6); // Limit to last 3 turns (6 messages)
+
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
@@ -62,7 +71,10 @@ export function useChat(apiUrl = 'http://localhost:5000/api/chat') {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ message: content })
+        body: JSON.stringify({ 
+          message: content,
+          history: chatHistory
+        })
       });
 
       if (!response.ok) {
@@ -139,7 +151,7 @@ export function useChat(apiUrl = 'http://localhost:5000/api/chat') {
     } finally {
       setIsLoading(false);
     }
-  }, [apiUrl, isLoading]);
+  }, [apiUrl, isLoading, messages]);
 
   return {
     messages,
