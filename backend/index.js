@@ -138,7 +138,7 @@ User query: "${message}"`;
       const { data: documents, error } = await supabase.rpc('match_documents', {
         query_embedding: queryEmbedding,
         match_threshold: 0.3,
-        match_count: 5
+        match_count: 15
       });
 
       if (error) throw error;
