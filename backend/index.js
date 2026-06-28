@@ -74,7 +74,7 @@ app.post('/api/chat', checkAuth, async (req, res) => {
       if (error) throw error;
 
       if (documents && documents.length > 0) {
-        contextText = documents.map(doc => doc.content).join('\n\n');
+        contextText = documents.map((doc, idx) => `[Document ${idx + 1}] (Source: ${doc.metadata?.source || 'Unknown'})\n${doc.content}`).join('\n\n---\n\n');
         citations = documents.map(doc => doc.metadata?.source || 'unknown');
         citations = [...new Set(citations)]; // Deduplicate
         console.log(`Found ${documents.length} relevant chunks for context.`);
@@ -95,13 +95,13 @@ app.post('/api/chat', checkAuth, async (req, res) => {
         .slice(-6); // Limit memory to last 3 turns (6 messages)
     }
 
-    const systemPrompt = `You are a professional, accurate RAG Chatbot. 
-Answer the user's question using ONLY the provided context below. Do not use any outside knowledge or hallucinate.
-If the context does not contain enough information to answer, state clearly that you do not have that information in your documents.
+    const systemPrompt = `You are an official NBR (National Board of Revenue) Assistant. 
+You must answer the user's query ONLY using the provided context retrieved from the database. Do not use any outside knowledge or hallucinate.
+If the answer is not present in the provided context, gracefully reply that you do not have the information in the current NBR documents. Do NOT make up answers or hallucinate.
 
-Answer in the same language as the user's query: if the query is in Bengali, respond in Bengali. If it is in English, respond in English.
+You must respond in the same language as the user's query: if the query is in Bengali, respond in Bengali. If it is in English, respond in English.
 
-When you use information from a document, include the source citation at the end of the sentence or block, using the filename, for example: [document_name.pdf].
+Mandatory Citation: Always cite the source at the end of the answer using the metadata provided (e.g., "Source: Value Added Tax Act, 2012").
 
 Retrieved Context:
 ---

@@ -72,7 +72,7 @@ export function chunkText(text, chunkSize = 500, overlap = 50) {
  * @param {string} filePath - Path to the PDF file.
  * @returns {Promise<string>} Extracted text.
  */
-async function parsePDF(filePath) {
+export async function parsePDF(filePath) {
   const dataBuffer = fs.readFileSync(filePath);
   const parser = new PDFParse(new Uint8Array(dataBuffer));
   const result = await parser.getText();

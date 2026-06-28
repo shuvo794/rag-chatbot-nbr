@@ -6,6 +6,7 @@
     "start": "node index.js",
     "dev": "node --watch index.js",
     "ingest": "node src/services/ingestion.js",
+    "ingest-json-pdfs": "node src/scripts/ingestJsonPdfs.js",
     "test": "node test.js"
   },
   "dependencies": {
