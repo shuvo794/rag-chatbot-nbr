@@ -85,7 +85,7 @@ export async function parsePDF(filePath) {
  * @param {string} filePath - Path to the image file.
  * @returns {Promise<string>} Extracted text.
  */
-async function parseImage(filePath) {
+export async function extractTextFromImage(filePath) {
   // Initialize tesseract worker for bilingual (English & Bengali) OCR
   const worker = await createWorker('eng+ben');
   const { data: { text } } = await worker.recognize(filePath);
@@ -134,7 +134,7 @@ export async function ingestDocs() {
       if (ext === '.pdf') {
         extractedText = await parsePDF(filePath);
       } else {
-        extractedText = await parseImage(filePath);
+        extractedText = await extractTextFromImage(filePath);
       }
 
       const wordCount = extractedText.trim().split(/\s+/).length;

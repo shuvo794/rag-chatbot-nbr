@@ -1,119 +1,100 @@
-# RAG Chatbot - Monorepo
+# AskNBR - NBR University RAG Chatbot
 
-A lightweight, high-performance RAG (Retrieval-Augmented Generation) Chatbot monorepo built using the MERN stack (Node.js/Express backend, React/Vite/Tailwind CSS v4 frontend) and Supabase as the Vector Database.
+AskNBR is a highly professional, lightweight, and high-performance Retrieval-Augmented Generation (RAG) chatbot designed to answer complex tax, act, and regulatory queries using the National Board of Revenue (NBR) VAT documents. It features bilingual query support, multi-format file ingestion (PDF & Image OCR), and conversation memory.
 
 ---
 
-## 🏗️ Architecture Overview
+## 🚀 Features Checklist
 
-The system is structured as a monorepo consisting of:
-1. **Frontend**: A React 19 single-page application built on Vite 8, featuring a modern, fully-responsive ChatGPT-style dark theme using Tailwind CSS v4 and Google Fonts (`Outfit` + `Hind Siliguri` for clean English and Bengali rendering).
-2. **Backend**: A Node.js v20 Express server handling file ingestion, text chunking, local vector embedding calculations, and OpenAI-compatible streaming LLM endpoint configuration.
-3. **Database (Supabase)**: Relies on `pgvector` to perform similarity indexing and cosine similarity search matches.
+- **[x] Bilingual Support:** Automatically detects Bengali queries, translates them to English for optimal semantic database matches, and replies in the user's original language.
+- **[x] DeepSeek / Gemini Dynamic LLM:** Configured with swappable LLM endpoints (supporting DeepSeek API, Google Gemini, Ollama, etc.) via simple environment variables.
+- **[x] Multi-format Ingestion with OCR:** Parses standard PDFs and runs high-accuracy image OCR (`.png`, `.jpg`, `.jpeg`) using Tesseract.js with bilingual (`eng+ben`) models.
+- **[x] Streaming Server-Sent Events (SSE):** Token-by-token streaming response to the frontend client for a low-latency chat experience.
+- **[x] Conversation Memory:** Retains conversation history (sliding window of the last 4-6 messages) to maintain contextual coherence across multiple turns.
 
-### System Architecture Flow (Mermaid)
+---
+
+## 🏗️ Architecture Diagram
+
+The flow below illustrates how a user query traverses the React frontend, triggers semantic translation, generates embeddings locally, queries the Supabase vector database, and streams the response back via SSE.
 
 ```mermaid
-graph TD
-    %% Frontend Component
-    subgraph Frontend [React Client - Port 5173]
-        UI[Chat Interface / App.jsx]
-        Hook[useChat Hook]
-        UI <--> Hook
+sequenceDiagram
+    actor User
+    participant FE as React Frontend (Vite)
+    participant BE as Node.js Backend (Express)
+    participant Xenova as Local Embedding Model
+    participant DB as Supabase (pgvector)
+    participant LLM as LLM API (DeepSeek/Gemini)
+
+    User->>FE: Types query (English or Bengali)
+    FE->>BE: Sends POST /api/chat (message + history)
+    
+    alt Query is Bengali
+        BE->>LLM: Translates query to English
+        LLM-->>BE: Returns translated query
     end
 
-    %% Backend Component
-    subgraph Backend [Express API - Port 5000]
-        API[Server Entry - index.js]
-        Config[LLM Configuration - src/config/llm.js]
-        SupabaseClient[DB Helper - src/db/supabase.js]
-        Ingestion[Ingestion Pipeline - src/services/ingestion.js]
-        LocalModel[Xenova Embedding Model]
-        
-        API --> Config
-        API --> SupabaseClient
-        API --> Ingestion
-        Ingestion --> LocalModel
-    end
+    BE->>Xenova: Generates 384-dim embedding vector
+    Xenova-->>BE: Returns embedding array
 
-    %% Database Component
-    subgraph Database [Supabase Cloud]
-        DB[(PostgreSQL + pgvector)]
-        RPC[match_documents RPC Function]
-        DB --> RPC
-    end
+    BE->>DB: Calls match_documents RPC (threshold: 0.3, limit: 15)
+    DB-->>BE: Returns up to 15 relevant document chunks + sources
 
-    %% Interactions
-    Hook -- "POST /api/chat (SSE Stream)" --> API
-    Hook -- "POST /api/ingest (Trigger)" --> API
-    Ingestion -- "Reads files" --> DocsFolder[docs/ Directory]
-    Ingestion -- "Bulk inserts vectors" --> DB
-    API -- "match_documents similarity lookup" --> RPC
-    API -- "Streams tokens" --> Hook
-    API -- "DeepSeek / Gemini API" --> LLMProvider[LLM Provider API]
+    BE->>BE: Injects system prompt, history, context, and query
+    BE->>LLM: Calls chat completions stream (with context in user prompt)
+    LLM-->>BE: Streams token chunks
+    BE-->>FE: Passes SSE chunks (text token + citations metadata)
+    FE-->>User: Renders markdown answer & citation source list
 ```
 
 ---
 
-## ⚡ Setup & Execution Instructions
+## 💻 Tech Stack
 
-Ensure you have **Node.js (v20+)** and **npm** installed.
-
-### Configuration (`.env`)
-1. Copy the environment template:
-   ```bash
-   cp .env.example .env
-   ```
-2. Populate the environment variables in `.env`:
-   - `SUPABASE_URL`: Your Supabase Project URL.
-   - `SUPABASE_ANON_KEY`: Your Supabase anonymous API key.
-   - `DEEPSEEK_API_KEY`: Your API key for the DeepSeek (or other OpenAI-compatible) LLM.
+- **Frontend:** React 19, Vite 8, Tailwind CSS v4, React Markdown, CSS Glassmorphism
+- **Backend:** Node.js, Express, OpenAI SDK, Tesseract.js (OCR), Xenova Transformers (`all-MiniLM-L6-v2`)
+- **Database:** Supabase (PostgreSQL with `pgvector` extension)
+- **Containerization:** Docker & Docker Compose
 
 ---
 
-### Option A: Local Run (No Docker required)
+## ⚡ Setup & Execution Instructions (Zero-Step)
 
-Start both services locally using your command prompt or terminal:
+You can spin up the entire application stack using Docker Compose without needing to manually install individual Node packages.
 
-#### 1. Ingest Documents (Optional)
-Put your PDF and Image documents inside the `docs/` folder at the root. Then run the ingestion script to parse them, calculate embeddings, and store them in Supabase:
+### 1. Configure Environment Variables
+Copy the template `.env.example` file to `.env` at the root of the workspace:
 ```bash
-cd backend
-npm install
-npm run ingest
+cp .env.example .env
+```
+Open the `.env` file and verify or input the configuration values:
+```env
+SUPABASE_URL=your_supabase_url
+SUPABASE_ANON_KEY=your_supabase_anon_key
+DEEPSEEK_API_KEY=your_openai_or_gemini_api_key
+DEEPSEEK_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+DEEPSEEK_MODEL=gemini-2.5-flash
+PORT=5000
+CHAT_PASSWORD=nbr_admin
 ```
 
-#### 2. Run the Backend API Server
-```bash
-# Inside the /backend folder
-npm run dev
-```
-*Backend runs on **[http://localhost:5000](http://localhost:5000)**.*
-
-#### 3. Run the Frontend Client
-Open a second terminal window:
-```bash
-cd frontend
-npm install
-npm run dev
-```
-*Frontend runs on **[http://localhost:5173](http://localhost:5173)**.*
-
----
-
-### Option B: Zero-Step Containerization (Docker Compose)
-If you have Docker Desktop installed, you can spin up the entire stack with a single command from the root directory:
-
+### 2. Run the Stack
+Start the containers using Docker Compose from the root directory:
 ```bash
 docker compose up --build
 ```
-*Docker Compose handles network routing, environment loading, and sets up live volume synchronization for hot-reloads during code changes.*
+
+- **Frontend Client:** Available at [http://localhost:5173](http://localhost:5173)
+- **Backend Server:** Running at [http://localhost:5000](http://localhost:5000)
+
+*The containers support live-volume synchronization; edits made in the code will hot-reload automatically.*
 
 ---
 
-## 🛠️ Supabase Database Migration
+## 🧱 Supabase Database Schema Setup
 
-Ensure your Supabase project has `pgvector` enabled and create the standard documents table. Run the SQL commands in [supabase_migration.sql](file:///d:/job_Task/rag-chatbot-nbr/backend/supabase_migration.sql) inside your Supabase **SQL Editor**:
+Ensure `pgvector` is enabled in your Supabase project. Run the SQL snippet below in the **SQL Editor** of your Supabase dashboard:
 
 ```sql
 -- Enable vector extension
@@ -124,7 +105,7 @@ create table if not exists documents (
   id bigserial primary key,
   content text not null,
   metadata jsonb,
-  embedding vector(384) -- Matches 384 dimensions of the local all-MiniLM-L6-v2 model
+  embedding vector(384) -- Matches dimensions of Xenova/all-MiniLM-L6-v2
 );
 
 -- Cosine similarity match RPC function
@@ -155,28 +136,24 @@ begin
 end;
 $$;
 
--- Create HNSW speed optimization index
+-- Create HNSW speed index for search optimization
 create index if not exists documents_embedding_hnsw_idx 
 on documents using hnsw (embedding vector_cosine_ops);
 ```
 
 ---
 
-## 🧠 Key Architectural Decisions
+## 🧠 Architectural Decisions
 
-### 1. Vector Database: Why pgvector & Supabase?
-- **Seamless Stack Integration**: Since Supabase is an open-source Firebase alternative built on PostgreSQL, utilizing `pgvector` allows us to store documents, metadata, and embeddings together in a single relational DB instead of maintaining a separate standalone vector DB (like Pinecone or Milvus).
-- **Standard SQL Querying**: We can query vectors directly using SQL expressions or RPC functions, making it easier to filter by metadata or combine vector searches with traditional structured queries.
-- **Cost Effective**: Supabase provides a free tier containing complete `pgvector` functionality, which fits perfectly for developer-friendly local or cloud setups.
+### 1. Cost-Efficient Local Embeddings (`Xenova/all-MiniLM-L6-v2`)
+Instead of calling third-party APIs (like OpenAI `text-embedding-3-small`) on every ingestion phase and query search, AskNBR generates vectors locally using `@xenova/transformers`.
+- **Zero API Cost & Rate Limits:** Runs entirely locally on CPU, ensuring search querying is free.
+- **Optimized Dimensionality:** Employs the compact `all-MiniLM-L6-v2` model (384 dimensions), which drastically reduces memory footprint and optimizes indexing lookup speeds compared to `1536` dimension models.
 
-### 2. Embedding Model: Why Local Xenova Transformers (`all-MiniLM-L6-v2`)?
-- **Zero Cost & Unlimited Limits**: Instead of paying for API calls (e.g. OpenAI `text-embedding-3-small`) and worrying about rate limits or network latency, we generate embeddings directly on the server host using `@xenova/transformers`.
-- **Lightweight Footprint**: The `all-MiniLM-L6-v2` model is extremely compact (approx. 90MB), runs efficiently on CPU container instances, and yields excellent performance for general text retrieval.
-- **Fast Similarity Indexing**: Generating `384` dimension embeddings consumes less network storage and memory resources, speeding up index query lookups compared to `1536` dimension vectors.
+### 2. Translation & Bilingual Alignment Pipeline
+To guarantee matching accuracy, Bengali queries are dynamically translated to English before vector matching:
+- **Semantic Consistency:** NBR documentation and regulations are historically written/structured in English. Translating queries to English ensures high-accuracy database search hits.
+- **Strict Grounding:** The system prompt instructs the LLM to translate context responses back to Bengali only if the user query was in Bengali, enforcing zero hallucination and strict grounding boundaries.
 
-### 3. Chunking Strategy: Why Overlapping Slips?
-- **Standard Chunk Size (500 Words)**: Splits the extracted raw text into chunks of 500 words. This provides enough surrounding context for the LLM to understand and form an accurate answer while remaining small enough to fit within model prompt limits.
-- **Boundary Overlap (50 Words)**: Creates a 50-word overlap at chunk boundaries. This guarantees that sentences or topics sliced at the border of a chunk are not lost, preserving context for query matching.
-
-### 4. Conversation Memory
-- **Dialogue Context turns**: The frontend `useChat` hook automatically tracks the dialogue state and sends the last 3 turns (6 messages: 3 user queries + 3 assistant responses) in the request body (`history` parameter) along with the active prompt. The Express endpoint appends this conversation history to the LLM message array, allowing the model to recall previous turns and maintain contextual cohesion.
+### 3. Context Injection Strategy
+Document context is placed in the final **User Message** directly adjacent to the active user query instead of the System message. This structural hierarchy keeps contextual facts close to the query prompt, improving model concentration and compliance.
