@@ -2,6 +2,40 @@ import { useEffect, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { useChat } from './hooks/useChat.js';
 
+/**
+ * Cleanly separates the document citation footers from the AI assistant message text.
+ * Returns the text body and an array of extracted unique sources.
+ */
+function extractSourcesFromText(text) {
+  if (!text) return { cleanText: '', sources: [] };
+
+  const sources = [];
+  let cleanText = text;
+
+  // Regex to match Source: ... or উৎস: ... (case-insensitive)
+  const sourceRegex = /(?:source|উৎস)\s*:\s*([^\n\r]+)/gi;
+  
+  let match;
+  const matches = [];
+  while ((match = sourceRegex.exec(text)) !== null) {
+    const sourceName = match[1].trim();
+    if (sourceName && !sources.includes(sourceName)) {
+      sources.push(sourceName);
+    }
+    matches.push(match[0]);
+  }
+
+  // Remove the citation strings from the text content
+  matches.forEach(m => {
+    cleanText = cleanText.replace(m, '');
+  });
+
+  // Clean trailing punctuation, dashes, or newlines
+  cleanText = cleanText.trim().replace(/---+\s*$/, '').trim();
+
+  return { cleanText, sources };
+}
+
 function App() {
   const { messages, isLoading, sendMessage, clearChat } = useChat('http://localhost:5000/api/chat');
   const [input, setInput] = useState('');
@@ -301,124 +335,126 @@ function App() {
             )}
 
             {/* Conversation Flow */}
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {/* Assistant Avatar */}
-                {msg.role === 'assistant' && (
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
-                    <svg className="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
-                    </svg>
-                  </div>
-                )}
+            {messages.map((msg, idx) => {
+              const isLastMessage = idx === messages.length - 1;
+              const isStreaming = isLoading && isLastMessage && msg.role === 'assistant';
 
-                {/* Message Body wrapper */}
-                <div className="flex flex-col max-w-[85%] space-y-2">
-                  <div
-                    className={`rounded-2xl px-5 py-3.5 leading-relaxed text-[13.5px] border ${
-                      msg.role === 'user'
-                        ? 'bg-gradient-to-r from-cyan-650 via-indigo-655 to-indigo-700 text-white border-transparent rounded-tr-none shadow-md shadow-indigo-950/40'
-                        : 'bg-slate-900 border-slate-800 text-slate-100 rounded-tl-none shadow-sm shadow-slate-950/20'
-                    }`}
-                  >
-                    {msg.role === 'user' ? (
-                      <p className="whitespace-pre-wrap font-medium">{msg.content}</p>
-                    ) : (
-                      <div className="markdown-content">
-                        {msg.content === '' && isLoading ? (
-                          <div className="flex items-center gap-1.5 py-2">
-                            <span className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                            <span className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                            <span className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                          </div>
-                        ) : (
-                          <ReactMarkdown
-                            components={{
-                              p: ({children, ...props}) => <p className="mb-3 last:mb-0 leading-relaxed text-slate-200" {...props}>{children}</p>,
-                              strong: ({children, ...props}) => <strong className="font-bold text-cyan-300" {...props}>{children}</strong>,
-                              ul: ({children, ...props}) => <ul className="list-disc pl-5 mb-3.5 space-y-1.5 text-slate-200" {...props}>{children}</ul>,
-                              ol: ({children, ...props}) => <ol className="list-decimal pl-5 mb-3.5 space-y-1.5 text-slate-200" {...props}>{children}</ol>,
-                              li: ({children, ...props}) => <li className="leading-relaxed" {...props}>{children}</li>,
-                              blockquote: ({children, ...props}) => <blockquote className="border-l-3 border-cyan-550 pl-4 py-0.5 my-3 italic text-slate-400 bg-slate-950/20 rounded-r-md" {...props}>{children}</blockquote>,
-                              code: ({children, ...props}) => {
-                                const content = String(children).replace(/\n$/, '');
-                                // Determine if the code text corresponds to a citation pattern
-                                const isCitation = typeof content === 'string' && /^\[.+\.(pdf|png|jpg|jpeg)\]$/i.test(content);
-                                if (isCitation) {
+              // Separate text content from source lines
+              const { cleanText, sources: extractedSources } = msg.role === 'assistant'
+                ? extractSourcesFromText(msg.content)
+                : { cleanText: msg.content, sources: [] };
+
+              // Combine citations from metadata with those extracted from text
+              const allCitations = msg.role === 'assistant'
+                ? [...new Set([...(msg.citations || []), ...extractedSources])]
+                : [];
+
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex gap-4 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in`}
+                >
+                  {/* Assistant Avatar */}
+                  {msg.role === 'assistant' && (
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-500 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/10 border border-indigo-400/20">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25m18 0A2.25 2.25 0 0 0 18.75 3H5.25A2.25 2.25 0 0 0 3 5.25m18 0V12a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 12V5.25" />
+                      </svg>
+                    </div>
+                  )}
+
+                  {/* Message Body wrapper */}
+                  <div className="flex flex-col max-w-[85%] space-y-2">
+                    <div
+                      className={`rounded-2xl px-5 py-4 leading-relaxed text-[14px] border transition-all ${
+                        msg.role === 'user'
+                          ? 'bg-gradient-to-br from-indigo-900/40 to-indigo-950/60 border-indigo-500/20 text-indigo-50 rounded-tr-none shadow-md shadow-indigo-950/20 font-medium'
+                          : 'bg-slate-900/35 border-slate-800/80 text-slate-100 rounded-tl-none shadow-md backdrop-blur-sm'
+                      }`}
+                    >
+                      {msg.role === 'user' ? (
+                        <p className="whitespace-pre-wrap font-medium tracking-wide bengali-text text-[14.5px]">{msg.content}</p>
+                      ) : (
+                        <div className="markdown-content">
+                          {msg.content === '' && isLoading ? (
+                            <div className="flex items-center gap-1.5 py-1 px-1">
+                              <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                              <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                              <span className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                            </div>
+                          ) : (
+                            <ReactMarkdown
+                              components={{
+                                p: ({children, ...props}) => (
+                                  <p className={`mb-3 last:mb-0 leading-relaxed md:leading-loose text-[14.5px] text-slate-200 bengali-text ${isStreaming ? 'streaming-cursor' : ''}`} {...props}>
+                                    {children}
+                                  </p>
+                                ),
+                                strong: ({children, ...props}) => <strong className="font-semibold text-cyan-400" {...props}>{children}</strong>,
+                                ul: ({children, ...props}) => <ul className="list-disc pl-5 mb-3.5 space-y-2 text-slate-300" {...props}>{children}</ul>,
+                                ol: ({children, ...props}) => <ol className="list-decimal pl-5 mb-3.5 space-y-2 text-slate-300" {...props}>{children}</ol>,
+                                li: ({children, ...props}) => <li className="leading-relaxed text-[14.5px] bengali-text" {...props}>{children}</li>,
+                                blockquote: ({children, ...props}) => <blockquote className="border-l-4 border-indigo-500/60 pl-4 py-1 my-3 italic text-slate-450 bg-slate-950/20 rounded-r-lg" {...props}>{children}</blockquote>,
+                                code: ({children, ...props}) => {
+                                  const content = String(children).replace(/\n$/, '');
+                                  const isCitation = typeof content === 'string' && /^\[.+\.(pdf|png|jpg|jpeg)\]$/i.test(content);
+                                  if (isCitation) {
+                                    return (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-955/60 text-cyan-400 font-bold font-mono text-[10.5px] border border-cyan-500/20 shadow-sm mx-0.5 cursor-default hover:bg-cyan-900/40 transition-colors">
+                                        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                                        </svg>
+                                        {content.slice(1, -1)}
+                                      </span>
+                                    );
+                                  }
                                   return (
-                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-950/70 text-cyan-400 font-bold font-mono text-[10.5px] border border-cyan-500/25 shadow-sm mx-0.5 cursor-default hover:bg-cyan-900 transition-colors">
-                                      <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                                      </svg>
-                                      {content.slice(1, -1)}
-                                    </span>
+                                    <code className="bg-slate-950 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs border border-slate-850" {...props}>
+                                      {children}
+                                    </code>
                                   );
                                 }
-                                return (
-                                  <code className="bg-slate-950 px-1.5 py-0.5 rounded text-rose-400 font-mono text-xs border border-slate-800" {...props}>
-                                    {children}
-                                  </code>
-                                );
-                              }
-                            }}
+                              }}
+                            >
+                              {highlightCitations(cleanText)}
+                            </ReactMarkdown>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Citations Tag/Pill List under Assistant message */}
+                    {msg.role === 'assistant' && allCitations.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-2 mt-2 pt-2 border-t border-slate-850/45">
+                        <span className="text-[9.5px] text-slate-500 font-bold tracking-wider font-mono self-center mr-1 uppercase">SOURCES:</span>
+                        {allCitations.map((cite, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center gap-1 py-1 px-3 bg-indigo-950/25 hover:bg-indigo-900/35 border border-indigo-500/20 hover:border-indigo-400/30 rounded-full text-[11px] text-indigo-300 font-medium font-mono transition-all cursor-default shadow-sm hover:scale-[1.01]"
                           >
-                            {highlightCitations(msg.content)}
-                          </ReactMarkdown>
-                        )}
+                            <svg className="w-3 h-3 text-indigo-400 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                            </svg>
+                            {cite}
+                          </span>
+                        ))}
                       </div>
                     )}
                   </div>
 
-                  {/* Highlighted Sources card list under Assistant message */}
-                  {msg.role === 'assistant' && msg.citations && msg.citations.length > 0 && (
-                    <div className="flex flex-wrap items-center gap-2 pl-1 my-1">
-                      <span className="text-[9px] text-slate-500 font-bold tracking-wider font-mono self-center mr-1 uppercase">SOURCES:</span>
-                      {msg.citations.map((cite, i) => (
-                        <div
-                          key={i}
-                          className="inline-flex items-center gap-1 py-0.5 px-2.5 bg-cyan-950/20 hover:bg-cyan-950/40 border border-cyan-500/15 rounded-md text-[10px] text-cyan-450 font-bold transition-all font-mono cursor-default shadow-sm hover:scale-[1.01]"
-                        >
-                          <svg className="w-3 h-3 text-cyan-550 shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                          </svg>
-                          {cite}
-                        </div>
-                      ))}
+                  {/* User Avatar */}
+                  {msg.role === 'user' && (
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/10 border border-indigo-400/20">
+                      <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                      </svg>
                     </div>
                   )}
                 </div>
+              );
+            })}
 
-                {/* User Avatar */}
-                {msg.role === 'user' && (
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center shrink-0 shadow-md">
-                    <svg className="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                    </svg>
-                  </div>
-                )}
-              </div>
-            ))}
 
-            {/* Typing Indicator for active response stream */}
-            {isLoading && messages[messages.length - 1]?.role === 'user' && (
-              <div className="flex gap-4 justify-start">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-cyan-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
-                  <svg className="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 21l8.904-.813a10.125 10.125 0 10-18.09-8.286v-.002" />
-                  </svg>
-                </div>
-                <div className="rounded-2xl px-5 py-3.5 bg-slate-900 border border-slate-800 text-slate-100 rounded-tl-none shadow-sm">
-                  <div className="flex items-center gap-1.5 py-1">
-                    <span className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Anchor for auto scroll */}
             <div ref={messagesEndRef} />

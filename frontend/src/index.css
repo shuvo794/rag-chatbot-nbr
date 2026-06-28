@@ -8,24 +8,56 @@
 
 body {
   font-family: var(--font-sans);
-  background-color: #0b0f19; /* Standard deep dark color */
+  background-color: #07090e; /* Elegant charcoal-black background */
+  color: #f1f5f9;
 }
 
 /* Custom Scrollbar for Chat Bubble lists */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.3);
+  background: rgba(7, 9, 14, 0.5);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.2);
+  background: rgba(99, 102, 241, 0.25); /* Indigo scrollbar indicator */
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.4);
+  background: rgba(99, 102, 241, 0.45);
 }
+
+/* Blinking Cursor for Active SSE Streaming */
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: '▋';
+  display: inline-block;
+  margin-left: 3px;
+  color: #38bdf8; /* sky-400 */
+  animation: cursor-blink 0.8s step-end infinite;
+  vertical-align: baseline;
+}
+
+/* Bengali Specific Readability Adjustments */
+.bengali-text {
+  line-height: 1.8;
+  word-spacing: 0.12em;
+  letter-spacing: 0.01em;
+}
+
+/* Glassmorphism Panel styles */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
