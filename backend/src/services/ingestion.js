@@ -36,23 +36,23 @@ export async function getEmbedding(text) {
  * @param {number} overlap - Number of overlapping words between consecutive chunks.
  * @returns {string[]} Array of text chunks.
  */
-export function chunkText(text, chunkSize = 500, overlap = 50) {
+export function chunkText(text, chunkSize = 1200, overlap = 250) {
   if (!text) return [];
   
-  // Standardize whitespace and split by space characters
-  const words = text.trim().replace(/\s+/g, ' ').split(' ');
+  // Standardize whitespace
+  const cleanText = text.trim().replace(/\s+/g, ' ');
   const chunks = [];
   
-  if (words.length <= chunkSize) {
-    return [words.join(' ')];
+  if (cleanText.length <= chunkSize) {
+    return [cleanText];
   }
 
   let i = 0;
-  while (i < words.length) {
-    const chunkWords = words.slice(i, i + chunkSize);
-    if (chunkWords.length === 0) break;
+  while (i < cleanText.length) {
+    const chunk = cleanText.slice(i, i + chunkSize);
+    if (chunk.length === 0) break;
     
-    chunks.push(chunkWords.join(' '));
+    chunks.push(chunk);
     
     // Advance index by the step size
     i += (chunkSize - overlap);
