@@ -91,11 +91,45 @@ app.post('/api/chat', checkAuth, async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   try {
-    // 1. Generate embedding for query
-    console.log(`Generating embedding for user query: "${message}"...`);
-    const queryEmbedding = await getEmbedding(message);
+    // 1. Query Translation (Bilingual pipeline)
+    let searchQuery = message;
+    const hasBengali = /[\u0980-\u09FF]/.test(message);
 
-    // 2. Search Supabase for similarity match
+    if (hasBengali) {
+      console.log(`Bengali characters detected in user query: "${message}". Translating to English for semantic matching...`);
+      try {
+        const openaiClient = new OpenAI({
+          apiKey: llmConfig.apiKey,
+          baseURL: llmConfig.baseURL
+        });
+
+        const translationPrompt = `You are a helper that translates Bengali queries to English to improve vector database semantic search.
+Translate the user's Bengali query into a clear, direct English search query. Preserve the original context and specialized NBR terms (like VAT, SRO, exemptions, tax rates).
+Respond ONLY with the translated English query. Do not add any conversational text, introductions, or explanations.
+
+User query: "${message}"`;
+
+        const translationResponse = await openaiClient.chat.completions.create({
+          model: llmConfig.model,
+          messages: [{ role: 'user', content: translationPrompt }],
+          temperature: 0.1
+        });
+
+        const translatedQuery = translationResponse.choices[0]?.message?.content?.trim();
+        if (translatedQuery) {
+          searchQuery = translatedQuery;
+          console.log(`Translated search query: "${searchQuery}"`);
+        }
+      } catch (transError) {
+        console.error('Query translation failed, falling back to original query:', transError);
+      }
+    }
+
+    // 2. Generate embedding for query
+    console.log(`Generating embedding for search query: "${searchQuery}"...`);
+    const queryEmbedding = await getEmbedding(searchQuery);
+
+    // 3. Search Supabase for similarity match
     console.log('Querying Supabase for similar document chunks...');
     let contextText = '';
     let citations = [];
@@ -149,7 +183,7 @@ Direct & Clear: Provide clear, concise, and structured answers. Use bullet point
 
 Mandatory Citations: You must cite the source document for every claim you make. Append the document title from the metadata at the end of your response (e.g., "Source: Value Added Tax Act, 1991").
 
-Language Matching: Reply in the exact same language (Bengali or English) as the user's prompt.
+Language Matching: Reply in the exact same language (Bengali or English) as the user's prompt. If the CONTEXT is in English and the user's query is in Bengali, read the English context carefully, translate the relevant information, and answer the user's question in their original language (Bengali) while maintaining all strict grounding and citation rules.
 
 CONTEXT:
 ---
