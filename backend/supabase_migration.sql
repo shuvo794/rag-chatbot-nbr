@@ -13,6 +13,9 @@ create table if not exists documents (
   embedding vector(384)                 -- Embedding vector representation (384 is standard for Xenova/all-MiniLM-L6-v2)
 );
 
+-- Disable Row Level Security (RLS) to ensure anon read/write permissions are allowed
+alter table documents disable row level security;
+
 -- 3. Create a function to perform cosine similarity searches
 create or replace function match_documents (
   query_embedding vector(384),
