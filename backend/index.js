@@ -1,11 +1,47 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { supabase } from './src/db/supabase.js';
 
 import { ingestDocs, getEmbedding } from './src/services/ingestion.js';
 import OpenAI from 'openai';
 import { llmConfig } from './src/config/llm.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+/**
+ * Dynamically reads the Acts and Rules JSON files and returns an array of all document titles.
+ */
+function getDocumentRegistry() {
+  const registry = [];
+  try {
+    const actsPath = path.resolve(__dirname, '../VAT-Acts.json');
+    const rulesPath = path.resolve(__dirname, '../VAT-Rules.json');
+
+    if (fs.existsSync(actsPath)) {
+      const acts = JSON.parse(fs.readFileSync(actsPath, 'utf8'));
+      for (const item of acts) {
+        const title = item['Act Title']?.text;
+        if (title) registry.push(title);
+      }
+    }
+
+    if (fs.existsSync(rulesPath)) {
+      const rules = JSON.parse(fs.readFileSync(rulesPath, 'utf8'));
+      for (const item of rules) {
+        const title = item['Title']?.text;
+        if (title) registry.push(title);
+      }
+    }
+  } catch (error) {
+    console.error('Error reading document registry:', error);
+  }
+  return registry;
+}
 
 dotenv.config();
 
@@ -95,6 +131,11 @@ app.post('/api/chat', checkAuth, async (req, res) => {
         .slice(-6); // Limit memory to last 3 turns (6 messages)
     }
 
+    const documentRegistry = getDocumentRegistry();
+    const registryListText = documentRegistry.length > 0
+      ? documentRegistry.map(title => `- ${title}`).join('\n')
+      : 'No documents registered.';
+
     const systemPrompt = `You are an official NBR (National Board of Revenue) Assistant. 
 You must answer the user's query ONLY using the provided context retrieved from the database. Do not use any outside knowledge or hallucinate.
 If the answer is not present in the provided context, gracefully reply that you do not have the information in the current NBR documents. Do NOT make up answers or hallucinate.
@@ -106,7 +147,12 @@ Mandatory Citation: Always cite the source at the end of the answer using the me
 Retrieved Context:
 ---
 ${contextText}
----`;
+---
+
+For your awareness, the following official NBR documents are available in your knowledge base (Injected Document Registry):
+${registryListText}
+
+Meta-Queries Instruction: If the user asks what documents are loaded, what documents you know about, what is in the database/knowledge base, or similar meta-questions, list the documents from the "Injected Document Registry" above instead of relying on the Retrieved Context. In these cases, do NOT include any source citations.`;
 
     const chatMessages = [
       { role: 'system', content: systemPrompt },
