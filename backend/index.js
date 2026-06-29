@@ -79,6 +79,30 @@ app.post('/api/ingest', checkAuth, async (req, res) => {
   }
 });
 
+/**
+ * Retries a promise-returning function with exponential backoff if it hits a 429 status code.
+ *
+ * @param {Function} fn - Function returning a promise to execute.
+ * @param {number} retries - Maximum retries.
+ * @param {number} delay - Base delay in milliseconds.
+ */
+async function retryWithBackoff(fn, retries = 3, delay = 2000) {
+  try {
+    return await fn();
+  } catch (error) {
+    const isRateLimit = error.status === 429 || 
+                        error.statusCode === 429 || 
+                        (error.message && error.message.includes('429')) ||
+                        (error.message && error.message.toLowerCase().includes('rate limit'));
+    if (isRateLimit && retries > 0) {
+      console.warn(`[LLM API Rate Limit 429] Retrying in ${delay / 1000} seconds... (${retries} attempts left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return retryWithBackoff(fn, retries - 1, delay * 2);
+    }
+    throw error;
+  }
+}
+
 app.post('/api/chat', checkAuth, async (req, res) => {
   const { message, history } = req.body;
   if (!message) {
@@ -109,11 +133,13 @@ Respond ONLY with the translated English query. Do not add any conversational te
 
 User query: "${message}"`;
 
-        const translationResponse = await openaiClient.chat.completions.create({
-          model: llmConfig.model,
-          messages: [{ role: 'user', content: translationPrompt }],
-          temperature: 0.1
-        });
+        const translationResponse = await retryWithBackoff(() =>
+          openaiClient.chat.completions.create({
+            model: llmConfig.model,
+            messages: [{ role: 'user', content: translationPrompt }],
+            temperature: 0.1
+          })
+        );
 
         const translatedQuery = translationResponse.choices[0]?.message?.content?.trim();
         if (translatedQuery) {
@@ -210,11 +236,13 @@ User Query: ${message}`;
       baseURL: llmConfig.baseURL
     });
 
-    const stream = await openaiClient.chat.completions.create({
-      model: llmConfig.model,
-      messages: chatMessages,
-      stream: true
-    });
+    const stream = await retryWithBackoff(() =>
+      openaiClient.chat.completions.create({
+        model: llmConfig.model,
+        messages: chatMessages,
+        stream: true
+      })
+    );
 
     for await (const chunk of stream) {
       const text = chunk.choices[0]?.delta?.content || '';
@@ -228,7 +256,18 @@ User Query: ${message}`;
 
   } catch (error) {
     console.error('Error in chat streaming:', error);
-    res.write(`data: ${JSON.stringify({ error: error.message || 'An error occurred during chat generation.' })}\n\n`);
+    
+    // Check if the final error is a rate limit error (429)
+    const isRateLimit = error.status === 429 || 
+                        error.statusCode === 429 || 
+                        (error.message && error.message.includes('429')) ||
+                        (error.message && error.message.toLowerCase().includes('rate limit'));
+                        
+    const userFriendlyMessage = isRateLimit 
+      ? "দুঃখিত, সার্ভারে অতিরিক্ত চাপ রয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন। (Sorry, the server is currently experiencing high traffic. Please try again in a moment.)"
+      : (error.message || 'An error occurred during chat generation.');
+
+    res.write(`data: ${JSON.stringify({ error: userFriendlyMessage })}\n\n`);
     res.end();
   }
 });
@@ -238,3 +277,5 @@ User Query: ${message}`;
 app.listen(PORT, () => {
   console.log(`Backend server is running on port ${PORT}`);
 });
+// Trigger reload for new .env change - v2
+
