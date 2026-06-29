@@ -59,38 +59,7 @@ sequenceDiagram
 
 ---
 
-## ⚡ Setup & Execution Instructions (Zero-Step)
 
-You can spin up the entire application stack using Docker Compose without needing to manually install individual Node packages.
-
-### 1. Configure Environment Variables
-Copy the template `.env.example` file to `.env` at the root of the workspace:
-```bash
-cp .env.example .env
-```
-Open the `.env` file and verify or input the configuration values:
-```env
-SUPABASE_URL=your_supabase_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
-DEEPSEEK_API_KEY=your_openai_or_gemini_api_key
-DEEPSEEK_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-DEEPSEEK_MODEL=gemini-2.5-flash
-PORT=5000
-CHAT_PASSWORD=nbr_admin
-```
-
-### 2. Run the Stack
-Start the containers using Docker Compose from the root directory:
-```bash
-docker compose up --build
-```
-
-- **Frontend Client:** Available at [http://localhost:5173](http://localhost:5173)
-- **Backend Server:** Running at [http://localhost:5000](http://localhost:5000)
-
-*The containers support live-volume synchronization; edits made in the code will hot-reload automatically.*
-
----
 
 ## 🧱 Supabase Database Schema Setup
 
