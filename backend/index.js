@@ -55,6 +55,10 @@ app.get('/', (req, res) => {
   res.json({ message: "Hello World from RAG Chatbot Backend!" });
 });
 
+app.get('/api/config', (req, res) => {
+  res.json({ model: llmConfig.model });
+});
+
 // Authentication middleware to check against optional CHAT_PASSWORD
 const checkAuth = (req, res, next) => {
   const chatPassword = process.env.CHAT_PASSWORD;

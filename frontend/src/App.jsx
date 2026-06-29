@@ -48,10 +48,37 @@ function App ()
   const [ ingestStatus, setIngestStatus ] = useState( '' );
   const messagesEndRef = useRef( null );
 
+  // Active Model from backend
+  const [ activeModel, setActiveModel ] = useState( '' );
+
   // Authentication states
   const [ isAuthModalOpen, setIsAuthModalOpen ] = useState( false );
   const [ passcode, setPasscode ] = useState( '' );
   const [ authError, setAuthError ] = useState( '' );
+
+  // Fetch LLM model configuration from backend
+  useEffect( () =>
+  {
+    const fetchConfig = async () =>
+    {
+      try
+      {
+        const response = await fetch( 'http://localhost:5000/api/config' );
+        if ( response.ok )
+        {
+          const data = await response.json();
+          if ( data.model )
+          {
+            setActiveModel( data.model );
+          }
+        }
+      } catch ( err )
+      {
+        console.error( 'Failed to fetch active model configuration:', err );
+      }
+    };
+    fetchConfig();
+  }, [] );
 
   // Listen to 401 unauthorized events from useChat hook
   useEffect( () =>
@@ -298,7 +325,7 @@ function App ()
             </button>
 
             <span className="text-[10px] font-mono font-bold tracking-wider py-1 px-3 bg-slate-900 border border-slate-850 rounded-full text-slate-400 shadow-inner uppercase">
-              Model: gemini-2.5-flash
+              Model: { activeModel || 'gemini-2.5-flash' }
             </span>
           </div>
         </header>
